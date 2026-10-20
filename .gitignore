@@ -1,0 +1,10 @@
+target/
+output/
+*.zip
+.idea/
+.vscode/
+*.iml
+.agents/
+.codex/
+.github/modernize/
+media/*.mp3
