@@ -79,7 +79,17 @@ public final class Experiments {
                 compare(out, "task5-synthetic", TestSignals.mixture(2*fs, fs, centers), stages, centers, play);
             }
             case 6, 7 -> JsynExperiments.run(task, p, play);
-            default -> throw new IllegalArgumentException("Task must be 1..7.");
+            case 8 -> {
+                double[] x = recording();
+                double[] y = FrequencyFilters.fftBandStop(x, fs, 435, 445);
+                String name = "task8";
+                Diagnostics.fftMask(out.resolve(name+"-response.csv"), fs, 1048576, 435, 445);
+                exportComparison(out, name, x, y, "Filtered", play,
+                        "FFT size=1048576\nzero padding=122476 samples\n"
+                        +"mask=0 for 435 <= abs(f) <= 445 Hz; 1 elsewhere\n"
+                        +"IFFT normalization=1/N\noutput cropped to original length\n");
+            }
+            default -> throw new IllegalArgumentException("Task must be 1..8.");
         }
     }
     private static double[] recording() throws Exception {
@@ -101,6 +111,14 @@ public final class Experiments {
         if (stages.length == 0) y = x.clone();
         else if (stages.length == 1) y = FrequencyFilters.process(x, stages[0]);
         else y = FrequencyFilters.cascade(x, stages);
+        Diagnostics.response(out.resolve(name+"-response.csv"), stages, fs);
+        if (frequencies != null) Diagnostics.tones(out.resolve(name+"-tones.csv"), x, y, fs, frequencies, stages);
+        exportComparison(out, name, x, y, stages.length == 0 ? "Identity copy (no filtering)" : "Filtered",
+                play, "stages="+Arrays.toString(stages)+"\n");
+    }
+    private static void exportComparison(Path out, String name, double[] x, double[] y,
+            String label, boolean play, String settings) throws Exception {
+        int fs = SAMPLE_RATE;
         Validation.samples(y);
         if (y.length != x.length) throw new IllegalStateException("Filter changed signal length.");
         // Analyze the same 32768-sample interval starting one second into both signals.
@@ -108,9 +126,7 @@ public final class Experiments {
         Spectrum after = FrequencyFilters.analyze(Arrays.copyOfRange(y, fs, fs+FFT_SIZE), fs, true);
         Diagnostics.spectrum(out.resolve(name+"-spectrum.csv"), before, after);
         SpectrumPlot.write(out.resolve(name+"-spectrum.png"), name, before, "Original", after,
-                stages.length == 0 ? "Identity copy (no filtering)" : "Filtered", 0, 4000);
-        Diagnostics.response(out.resolve(name+"-response.csv"), stages, fs);
-        if (frequencies != null) Diagnostics.tones(out.resolve(name+"-tones.csv"), x, y, fs, frequencies, stages);
+                label, 0, 4000);
         double peak = 0;
         for (double[] a : new double[][]{x, y}) for (double v : a) peak = Math.max(peak, Math.abs(v));
         double scale = peak > 0.8 ? 0.8/peak : 1;
@@ -118,8 +134,8 @@ public final class Experiments {
         for (int n = 0; n < x.length; n++) { listeningX[n] *= scale; listeningY[n] *= scale; }
         AudioFiles.write(out.resolve(name+"-original.wav"), listeningX, fs);
         AudioFiles.write(out.resolve(name+"-filtered.wav"), listeningY, fs);
-        Files.writeString(out.resolve(name+"-settings.txt"), "stages="+Arrays.toString(stages)
-                +"\ncommon listening attenuation="+scale+"\nspectrum interval=[44100,76868)\n");
+        Files.writeString(out.resolve(name+"-settings.txt"), settings
+                +"common listening attenuation="+scale+"\nspectrum interval=[44100,76868)\n");
         System.out.printf("%s: %d samples, raw peak %.6f, common listening scale %.6f%n", name, x.length, peak, scale);
         if (play) { AudioOutput.play(listeningX, fs); AudioOutput.play(listeningY, fs); }
     }

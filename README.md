@@ -1,27 +1,28 @@
 # Lab 04: Frequency response and audio equalization
 
-This project is a Java starter for **seven required tasks**, in the
+This project is a Java starter for **eight required tasks**, in the
 same format as Lab 03. Start with spectral measurements, implement second-order
 filters, then connect several equalizer bands. The original low-pass, notch and
 seven-band equalizer examples are retained and extended with numerical comparisons.
+Task 8 adds offline filtering by multiplying FFT bins and reconstructing with IFFT.
 
-The array-processing algorithms are in **`FrequencyFilters.java`**. Tasks 6–7
+The array-processing algorithms for Tasks 1–5 and 8 are in **`FrequencyFilters.java`**. Tasks 6–7
 use **`JsynFilters.java`** and the marked connections in **`JsynAudio.java`**. `TODO (Task N)` comments
 mark methods you must implement. Each unfinished method throws
 `UnsupportedOperationException("TODO (Task N)")`. FFT, WAV I/O,
 parameter generation, diagnostics and runners are prepared infrastructure.
 Assume valid algorithm inputs; validation and exception handling are not student tasks.
 
-Despite the legacy exercise name, the filters here operate **in the time domain**
-using IIR difference equations. Their behavior is analyzed in the frequency domain.
-Multiplication of FFT bins and overlap-add convolution are not part of this lab.
+Tasks 2–7 filter **in the time domain** using IIR difference equations. Their
+behavior is analyzed in the frequency domain. Task 8 instead filters **in the
+frequency domain** using FFT → mask → IFFT. Overlap-add convolution is not part of this lab.
 
 ## Setup and running
 
 Use JDK 21 or newer and Maven 3.9.x or newer. Open the directory containing
 `pom.xml` as a Maven project. Maven may need internet access to download build
 plugins and JSyn. Tasks 6–7 use **JSyn v17.2.0**, resolved through the JitPack
-repository declared in `pom.xml`. Tasks 1–5 use array processing and the prepared FFT.
+repository declared in `pom.xml`. Tasks 1–5 and 8 use array processing and the prepared FFT/IFFT.
 The JSyn tasks use the standard JavaSound backend; no native audio library is required.
 
 Run from the project root:
@@ -34,10 +35,10 @@ mvn -q compile exec:java "-Dexec.args=--task1 11111111"
 ```
 
 Replace `11111111` with your eight-digit student ID, preserving leading zeroes.
-`--checkN` writes diagnostics and WAV files without an audio device. In Tasks 1–5,
+`--checkN` writes diagnostics and WAV files without an audio device. In Tasks 1–5 and 8,
 `--taskN` also plays each original followed by its filtered version. In Tasks 6–7,
 `--taskN` plays the **filtered JSyn signal live while recording it**; it does not
-play the original first. Start with low device volume. N is **1 through 7**.
+play the original first. Start with low device volume. N is **1 through 8**.
 
 In IntelliJ, run `Main.main` as an Application with `--check3 11111111` in
 Program arguments and the project root as Working directory. For a Maven run
@@ -52,6 +53,7 @@ configuration use `compile exec:java "-Dexec.args=--check3 11111111"`, without `
 | 5 | Seven-band cascade on 30-second music excerpt and synthetic mixture | 64 s |
 | 6 | JSyn 440 Hz band-stop on siney.wav; filtered playback and recording | 21.25 s |
 | 7 | JSyn seven-band equalizer on music; filtered playback and recording | 30.25 s |
+| 8 | FFT band-stop on siney.wav; original then filtered recording | 42 s |
 
 All commands are independent of previous runs. Outputs are in
 `output/<student-id>/`; repeating a command replaces files with matching names.
@@ -233,7 +235,7 @@ explicit dB gains to demonstrate both boosting and cutting:
 
 Process **`media/intractable-excerpt.wav`**, a 30-second excerpt of Kevin MacLeod's
 *Intractable* (source interval 00:30–01:00). This music is used in Tasks 5 and 7;
-Tasks 1, 3, 4 and 6 retain `media/siney.wav`. Attribution, license and conversion
+Tasks 1, 3, 4, 6 and 8 retain `media/siney.wav`. Attribution, license and conversion
 details are in `media/CREDITS.md`.
 
 Also process the same two-second mixture containing all seven center tones,
@@ -363,9 +365,77 @@ The analytic response CSV is computed from the reference coefficients.
 
 Reference: [JSyn programming guide](https://softsynth.com/jsyn/docs/usersguide/).
 
+## Task 8 — Remove the 440 Hz tone with FFT filtering
+
+Use **`media/siney.wav`** to implement the complete offline pipeline:
+
+```text
+WAV samples → zero padding → FFT → multiply by band-stop mask → IFFT → crop → WAV
+```
+
+Implement **`FrequencyFilters.fftBandStop(samples, sampleRate, lowHz, highHz)`**,
+marked `TODO (Task 8)`. Reject the band **435–445 Hz**, including both edges, to attenuate the
+strong continuous 440 Hz sinusoid. Keep every other bin unchanged. These fixed
+frequencies do not depend on student ID. Compare with Task 3's Q=10 recording
+notch and Task 6's JSyn band-stop; the masks and IIR responses differ.
+
+1. Copy the complete recording into a real buffer padded with zeroes to the next
+   power of two, N=1048576. Create an equally long zero imaginary buffer. Preserve
+   the input array. The recording has 926100 samples, so append 122476 zeroes.
+2. Call the prepared `Fft.forward(re, im)`. Use the complex FFT values directly,
+   rather than the magnitudes returned by `analyze`.
+3. For every bin k=0,…,N−1, calculate `fAbs = min(k, N-k)*sampleRate/N`. Set
+   `H[k]=0` when `435 <= fAbs <= 445`, otherwise `H[k]=1`. Multiply **both real
+   and imaginary parts** by H[k]. This applies the same mask to positive and
+   negative frequencies and preserves conjugate symmetry for a real output.
+4. Call the prepared `Fft.inverse(re, im)`, which includes the required **1/N**
+   normalization. The imaginary residual should be negligible. Return the real
+   part cropped to the original sample count.
+5. Compare the original and filtered spectra and listen to both WAV files.
+   Explain why removing only the single bin nearest 440 Hz would leave leakage:
+   440 Hz is not bin-centered for this padded transform (spacing ≈0.042057 Hz).
+
+Do **not** apply a Hann window to the processing buffer: that would change the
+recording's amplitude envelope. Hann is used only for the separate before/after
+spectrum plots, using the same 32768-sample interval as earlier tasks. Those plots
+have a different bin spacing from the full-recording processing FFT.
+
+This is an offline, noncausal, **circular filtering** demonstration on the padded
+N-sample buffer, not a streaming implementation. Padding to a power of two makes
+the radix-2 FFT possible; it does not by itself turn this operation into linear
+convolution. A hard mask has a long periodic impulse response, can produce ringing
+before and after changes, and can affect the recording's edges. Cropping discards
+its padded tail. A zeroed processing bin also does not guarantee a zero bin in a
+spectrum recomputed on a cropped or windowed interval. There is no clean reference
+for the recording, and useful sound in the rejected band is removed too.
+
+Checks: on a 1024-sample buffer at 8192 Hz, remove an exact 440 Hz bin-centered tone
+while retaining DC, 640 Hz and Nyquist components within floating-point tolerance.
+A mask that rejects no bins must reconstruct the input, including when padding
+and cropping are needed. The inverse FFT must reconstruct complex test inputs.
+
+```bash
+mvn -q compile exec:java "-Dexec.args=--check8 11111111"
+mvn -q compile exec:java "-Dexec.args=--task8 11111111"
+```
+
+Outputs: `task8-original.wav`, `task8-filtered.wav`, `task8-spectrum.csv`,
+`task8-spectrum.png`, `task8-response.csv` and `task8-settings.txt`. Both WAVs are
+44100 Hz mono, **21 seconds**, with the same listening attenuation and no added
+tail. `--check8` exports without an audio device; `--task8` also plays the original
+followed by the filtered version. The response CSV contains all N/2+1 positive
+frequency mask bins, including DC and Nyquist, so the narrow rejected band is
+visible; it is not the 4097-point analytic IIR response used by earlier tasks.
+For zero mask gain, the dB column uses the -240 dB display floor. Settings record
+padding, FFT size, mask, normalization, cropping and listening attenuation.
+
+Optional exploration: replace each hard edge with a smooth transition and compare
+ringing, residual tone and changes to neighboring frequencies.
+
 ## Output conventions and architecture
 
-For Tasks 1–5, every comparison prefix produces:
+For Tasks 1–5, every comparison prefix produces (Task 8 shares the WAV and spectrum
+conventions, with its mask response and settings described above):
 
 - `*-original.wav`, `*-filtered.wav`: complete listening copies.
 - `*-spectrum.csv`: raw input/output peak amplitudes and dBFS, periodic Hann,
@@ -391,7 +461,7 @@ Each original/filtered WAV pair receives the same attenuation factor to keep its
 peak at most 0.8, without amplification. Each pair is scaled separately. Compare
 levels **within a pair**, or use raw CSV values across experiments. No clipping or
 normalization is applied to algorithm buffers or CSV diagnostics. WAV export uses
-16-bit PCM quantization. Tasks 1–5 do not append a filter-decay tail; Tasks 6–7
+16-bit PCM quantization. Tasks 1–5 and 8 do not append a filter-decay tail; Tasks 6–7
 append 250 ms as described above.
 
 Both supplied WAV recordings are signed 16-bit little-endian **mono PCM** at
@@ -406,18 +476,21 @@ these filters. No resampling takes place during the experiments.
 
 Algorithm preconditions: finite samples; spectrum buffers have power-of-two N>=2
 and positive integer sample rate; filter design uses `0<f0<sampleRate/2`, positive
-finite Q and finite gain. `process` and `cascade` also accept empty signals;
-analysis and audio export require nonempty signals. Every call starts fresh;
-calling `process` separately on consecutive blocks would reset state and is not
+finite Q and finite gain. `process`, `cascade` and `fftBandStop` also accept empty signals;
+analysis and audio export require nonempty signals. Every call starts fresh.
+Task 8 accepts arbitrary-length inputs, preserves the input, and returns a distinct
+same-length array (including for empty inputs); its FFT buffers use a power of two
+of at least 2. Its band limits satisfy `0 <= lowHz <= highHz <= sampleRate/2`.
+Calling `process` separately on consecutive blocks would reset state and is not
 a streaming implementation. Initial transients are retained in WAV outputs.
 
 | File | Responsibility |
 | --- | --- |
-| `FrequencyFilters.java` | Tasks 1–5 algorithm stubs with TODO markers |
+| `FrequencyFilters.java` | Tasks 1–5 and 8 algorithm stubs with TODO markers |
 | `JsynFilters.java` | Task 6 band-stop and Task 7 peaking/cascade stubs |
 | `JsynAudio.java` | JSyn reader, graph connections, playback, recording and cleanup |
 | `JsynExperiments.java` | Tasks 6–7 runners, reference checks and recorded-output diagnostics |
-| `Fft.java`, `Spectrum.java` | Prepared transform and spectrum representation |
+| `Fft.java`, `Spectrum.java` | Prepared forward/inverse transforms and spectrum representation |
 | `Coefficients.java` | Normalized coefficient data and normalization helper |
 | `Experiments.java`, `Main.java` | Independent task runners and CLI |
 | `Diagnostics.java`, `TestSignals.java` | Analytic response, measurements, CSVs, signals |
@@ -442,7 +515,8 @@ Failures in the suite throw exceptions without requiring Java's `-ea` flag.
 Checks cover FFT against direct complex DFT, Hann calibration, DC/Nyquist handling,
 leakage, a hand-calculated impulse response, filter endpoints, center gains, Q,
 measured steady-state response, boost/cut cancellation, input preservation,
-state reset, generator constraints, recording format and WAV roundtrip.
+state reset, inverse FFT roundtrips, FFT mask rejection and preservation, padding
+and cropping, generator constraints, recording format and WAV roundtrip.
 
 The additional `JsynChecks` suite records identity, single-band peaking cut, 440 Hz band-stop
 and seven-band cascade fixtures without an audio device. It checks sample alignment, complete
@@ -453,7 +527,8 @@ For each task report your ID and parameters, predicted and observed changes,
 relevant spectrum/response plots and tone measurements, and listening observations.
 Explain leakage in Task 1, finite roll-off in Task 2, notch width in Task 3, dB
 conversion in Task 4, overlapping-band gains in Task 5, playback/recording
-connections in Task 6 and serial JSyn routing in Task 7. Numerical checks do
+connections in Task 6, serial JSyn routing in Task 7, and symmetric FFT masking,
+IFFT normalization, leakage and ringing in Task 8. Numerical checks do
 not substitute for listening.
 
 ## Distribution contents
@@ -467,7 +542,9 @@ enough to store directly in the repository; no Git LFS setup is needed.
 The starter compiles before any task is implemented. Parameter generation also
 works immediately. The check suites and task commands report TODO exceptions
 until the methods they call are implemented; this is expected in the starter.
-Tasks 2–5 also use Task 1 spectrum analysis for diagnostics. Tasks 6–7 need the
+Tasks 2–5 and 8 also use Task 1 spectrum analysis for diagnostics. Task 8 uses
+the prepared forward/inverse FFT and its own TODO method; it does not depend on
+the IIR filter implementations or JSyn connections. Tasks 6–7 need the
 array-based analysis, processing, coefficient design and cascade from Tasks 1–5
 for their reference checks, as well as Task 6 graph connections. Task 7 needs
 Task 6 output routing even when Task 6's band-stop branch is not used.

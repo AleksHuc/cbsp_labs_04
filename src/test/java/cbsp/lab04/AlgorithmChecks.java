@@ -18,7 +18,7 @@ public final class AlgorithmChecks {
         if (!condition) throw new AssertionError("Condition failed");
     }
     public static void main(String[] args) throws Exception {
-        fftAgainstDirectDft(); spectra(); filtering(); parametersAndAudio();
+        fftAgainstDirectDft(); spectra(); filtering(); fftFiltering(); parametersAndAudio();
         System.out.println("PASS: "+checks+" numerical and integration checks");
     }
     private static void fftAgainstDirectDft() {
@@ -37,7 +37,34 @@ public final class AlgorithmChecks {
                 }
                 close(re[k], dr, 1e-10); close(im[k], di, 1e-10);
             }
+            Fft.inverse(re, im);
+            for (int i = 0; i < n; i++) {
+                close(re[i], originalRe[i], 1e-12);
+                close(im[i], originalIm[i], 1e-12);
+            }
         }
+    }
+    private static void fftFiltering() {
+        int n = 1024, fs = 8192;
+        double[] x = new double[n], expected = new double[n];
+        for (int i = 0; i < n; i++) {
+            expected[i] = 0.1 + 0.2*Math.sin(2*Math.PI*640*i/fs) + 0.05*(i%2 == 0 ? 1 : -1);
+            x[i] = expected[i] + 0.3*Math.sin(2*Math.PI*440*i/fs);
+        }
+        double[] copy = x.clone();
+        // Exact bin tones independently check rejection, preservation, DC, Nyquist and scaling.
+        double[] y = FrequencyFilters.fftBandStop(x, fs, 435, 445);
+        for (int i = 0; i < n; i++) close(y[i], expected[i], 1e-11);
+        require(Arrays.equals(x, copy));
+        // Inclusive edges: 440 Hz is exactly on a bin in this fixture.
+        y = FrequencyFilters.fftBandStop(x, fs, 440, 440);
+        for (int i = 0; i < n; i++) close(y[i], expected[i], 1e-11);
+        // No bins lie in [1,2] Hz; exercises zero padding and cropping for arbitrary lengths.
+        double[] shortInput = Arrays.copyOf(x, 777);
+        y = FrequencyFilters.fftBandStop(shortInput, fs, 1, 2);
+        require(y.length == shortInput.length && y != shortInput);
+        for (int i = 0; i < y.length; i++) close(y[i], shortInput[i], 1e-11);
+        require(FrequencyFilters.fftBandStop(new double[0], fs, 435, 445).length == 0);
     }
     private static void spectra() {
         int n = 1024, fs = 8192;

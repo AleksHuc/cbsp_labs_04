@@ -1,6 +1,6 @@
 package cbsp.lab04;
 
-/** Tasks 1–5: implement the methods marked TODO.
+/** Tasks 1–5 and 8: implement the methods marked TODO.
  * Algorithm inputs are validated by the prepared infrastructure or assumed valid.
  * Coefficient equations: W3C Audio EQ Cookbook (RBJ), Q parametrization.
  */
@@ -47,5 +47,11 @@ public final class FrequencyFilters {
     public static double[] cascade(double[] samples, Coefficients[] stages) {
         // TODO (Task 5): implement this method.
         throw new UnsupportedOperationException("TODO (Task 5)");
+    }
+
+    // TODO (Task 8): FFT -> symmetric band-stop mask -> IFFT, without an analysis window.
+    public static double[] fftBandStop(double[] samples, int sampleRate, double lowHz, double highHz) {
+        // TODO (Task 8): implement this method.
+        throw new UnsupportedOperationException("TODO (Task 8)");
     }
 }

@@ -7,7 +7,7 @@ public final class Main {
     public static void main(String[] args) {
         Locale.setDefault(Locale.ROOT);
         if (args.length == 0 || (args.length == 1 && args[0].equals("--help"))) { help(); return; }
-        if (args.length != 2 || !(args[0].equals("--parameters") || args[0].matches("--(task|check)[1-7]"))) {
+        if (args.length != 2 || !(args[0].equals("--parameters") || args[0].matches("--(task|check)[1-8]"))) {
             help(); System.exit(2); return;
         }
         try {
@@ -24,9 +24,9 @@ public final class Main {
     private static void help() {
         System.out.println("Usage: Main <command> <eight-digit-student-id>");
         System.out.println("--parameters    Print assigned settings");
-        System.out.println("--check1..7     Numerical diagnostics, no audio device needed");
-        System.out.println("--task1..7      Playback plus exports; Tasks 6/7 record the live JSyn signal");
-        System.out.println("All seven tasks are required. Tasks 1, 3, 4, 6: siney.wav; Tasks 5, 7: intractable-excerpt.wav.");
+        System.out.println("--check1..8     Numerical diagnostics, no audio device needed");
+        System.out.println("--task1..8      Playback plus exports; Tasks 6/7 record the live JSyn signal");
+        System.out.println("All eight tasks are required. Tasks 1, 3, 4, 6, 8: siney.wav; Tasks 5, 7: intractable-excerpt.wav.");
         System.out.println("Output: output/<student-id>/.");
     }
 }

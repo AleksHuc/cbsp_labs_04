@@ -9,6 +9,17 @@ import java.util.Locale;
 /** Prepared raw diagnostics: no listening-copy attenuation is applied here. */
 public final class Diagnostics {
     private Diagnostics() { }
+    /** Actual positive-frequency mask bins, including the narrow rejected band. */
+    public static void fftMask(Path path, int fs, int n, double lowHz, double highHz) throws IOException {
+        try (PrintWriter w = writer(path)) {
+            w.println("frequency_hz,gain_linear,gain_db");
+            for (int k = 0; k <= n/2; k++) {
+                double hz = k*(double)fs/n;
+                double gain = hz >= lowHz && hz <= highHz ? 0 : 1;
+                w.printf(Locale.ROOT, "%.12g,%.12g,%.12g%n", hz, gain, Spectrum.db(gain));
+            }
+        }
+    }
     public static void spectrum(Path path, Spectrum before, Spectrum after) throws IOException {
         try (PrintWriter w = writer(path)) {
             w.println("frequency_hz,input_amplitude,output_amplitude,input_dbfs,output_dbfs");

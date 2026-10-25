@@ -2,6 +2,15 @@ package cbsp.lab04;
 /** Prepared in-place radix-2 complex FFT, negative exponent, no forward scaling. */
 public final class Fft {
     private Fft() { }
+    /** Prepared inverse transform, including 1/N normalization. */
+    public static void inverse(double[] re, double[] im) {
+        for (int i = 0; i < im.length; i++) im[i] = -im[i];
+        forward(re, im);
+        for (int i = 0; i < re.length; i++) {
+            re[i] /= re.length;
+            im[i] = -im[i]/re.length;
+        }
+    }
     public static void forward(double[] re, double[] im) {
         int n = re.length;
         if (n < 2 || (n & (n-1)) != 0 || im.length != n)
